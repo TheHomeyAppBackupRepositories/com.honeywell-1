@@ -47,7 +47,7 @@ class ThermostatDevice extends homey_oauth2app_1.OAuth2Device {
         }
         const locationStatus = await this.oAuth2Client.getLocationStatus(this.deviceData.locationId).catch(this.error);
         this.log('Location status', JSON.stringify(locationStatus));
-        locationStatus?.gateways.forEach(gateway => {
+        (locationStatus?.gateways ?? []).forEach(gateway => {
             this.log('Gateway status', JSON.stringify(gateway));
             const thermostat = gateway.temperatureControlSystems.find(thermostat => thermostat.systemId === this.getData().id);
             if (thermostat) {
