@@ -47,7 +47,7 @@ class HoneywellAppInstance extends homey_oauth2app_1.OAuth2App {
                                 return this.error('Webhook for unknown device received!');
                             }
                             if (device.hasCapability('target_temperature') && setpoint) {
-                                device.setCapabilityValue('target_temperature', setpoint).catch(device.error);
+                                device.setTargetTemperature(setpoint).catch(device.error);
                             }
                             break;
                         case 'QuickAction':

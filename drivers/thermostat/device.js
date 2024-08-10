@@ -9,6 +9,7 @@ class ThermostatDevice extends homey_oauth2app_1.OAuth2Device {
             await this.addCapability('alarm_battery');
         }
         this.deviceData = this.getData();
+        this.log('Thermostat init', JSON.stringify(this.deviceData));
         this.registerCapabilityListener('honeywell_thermostat_mode', async (mode) => {
             if (!this.deviceData) {
                 return;
@@ -22,6 +23,10 @@ class ThermostatDevice extends homey_oauth2app_1.OAuth2Device {
             .registerCloudAdapter(this.deviceData.id, this.deviceData.mac, this.oAuth2Client).catch(this.error);
         await this.getStatus();
         this.statusInterval = this.homey.setInterval(this.getStatus.bind(this), 1000 * 60 * 60); // 1 hour
+        this.setSettings({
+            location_id: this.deviceData.locationId,
+            thermostat_id: this.deviceData.id,
+        }).catch(this.error);
     }
     async overrideMode(mode, time, hours) {
         if (!this.deviceData) {
@@ -46,16 +51,15 @@ class ThermostatDevice extends homey_oauth2app_1.OAuth2Device {
             return;
         }
         const locationStatus = await this.oAuth2Client.getLocationStatus(this.deviceData.locationId).catch(this.error);
-        this.log('Location status', JSON.stringify(locationStatus));
-        (locationStatus?.gateways ?? []).forEach(gateway => {
-            this.log('Gateway status', JSON.stringify(gateway));
+        for (const gateway of (locationStatus?.gateways ?? [])) {
             const thermostat = gateway.temperatureControlSystems.find(thermostat => thermostat.systemId === this.getData().id);
             if (thermostat) {
                 this.log('Thermostat status', JSON.stringify(thermostat));
                 this.setCapabilityValue('honeywell_thermostat_mode', thermostat.systemModeStatus.mode).catch(this.error);
                 this.checkBatteryLow(thermostat.activeFaults);
+                break;
             }
-        });
+        }
     }
     checkBatteryLow(faults) {
         if (faults.some((fault) => fault.faultType === 'TempControlSystemControllerBatteryLow')) {

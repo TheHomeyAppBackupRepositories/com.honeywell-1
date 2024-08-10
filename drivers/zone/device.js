@@ -10,6 +10,7 @@ class ZoneDevice extends homey_oauth2app_1.OAuth2Device {
             await this.addCapability('alarm_battery');
         }
         this.deviceData = this.getData();
+        this.log('Zone init', JSON.stringify(this.deviceData));
         this.registerCapabilityListener('target_temperature', async (temperature) => {
             if (!this.deviceData) {
                 return;
@@ -20,28 +21,30 @@ class ZoneDevice extends homey_oauth2app_1.OAuth2Device {
             .registerCloudAdapter(this.deviceData.id, this.deviceData.mac, this.oAuth2Client).catch(this.error);
         await this.getStatus();
         this.statusInterval = this.homey.setInterval(this.getStatus.bind(this), 1000 * 60 * 60); // 1 hour
+        this.setSettings({
+            location_id: this.deviceData.locationId,
+            zone_id: this.deviceData.id,
+        }).catch(this.error);
     }
     async getStatus() {
         if (!this.deviceData) {
             return;
         }
-        const locationStatus = await this.oAuth2Client.getLocationStatus(this.deviceData.locationId).catch(this.error);
-        this.log('Location status', JSON.stringify(locationStatus));
-        (locationStatus?.gateways ?? []).forEach(gateway => {
-            this.log('Gateway status', JSON.stringify(gateway));
-            gateway.temperatureControlSystems.forEach(thermostat => {
-                this.log('Thermostat status', JSON.stringify(thermostat));
-                const zone = thermostat.zones.find(zone => zone.zoneId === this.getData().id);
-                if (zone) {
-                    this.log('Zone status', JSON.stringify(zone));
-                    this.setCapabilityValue('target_temperature', zone.setpointStatus.targetHeatTemperature).catch(this.error);
-                    if (zone.temperatureStatus.isAvailable) {
-                        this.setMeasuredTemperature(zone.temperatureStatus.temperature).catch(this.error);
-                    }
-                    this.checkBatteryLow(zone.activeFaults);
-                }
-            });
-        });
+        const zoneInformation = await this.oAuth2Client.getZoneInformation(this.deviceData.locationId, this.deviceData.id).catch(this.error);
+        if (!zoneInformation) {
+            return;
+        }
+        if (zoneInformation.zone) {
+            await this.setCapabilityOptions('target_temperature', (0, temperatureHelper_1.getTargetTemperatureCapabilityOptions)(zoneInformation.zone)).catch(this.error);
+        }
+        if (zoneInformation.status) {
+            const status = zoneInformation.status;
+            await this.setTargetTemperature(Number(status.setpointStatus.targetHeatTemperature)).catch(this.error);
+            if (status.temperatureStatus.isAvailable) {
+                this.setMeasuredTemperature(status.temperatureStatus.temperature).catch(this.error);
+            }
+            this.checkBatteryLow(status.activeFaults);
+        }
     }
     checkBatteryLow(faults) {
         if (faults.some((fault) => ['TempZoneSensorLowBattery', 'TempZoneActuatorLowBattery'].includes(fault.faultType))) {
@@ -98,7 +101,24 @@ class ZoneDevice extends homey_oauth2app_1.OAuth2Device {
             }
         }
     }
+    async setTargetTemperature(setpoint) {
+        const capabilityOptions = this.getCapabilityOptions('target_temperature');
+        const newCapabilityOptions = {};
+        if (setpoint > (capabilityOptions.max ?? -Infinity)) {
+            newCapabilityOptions.max = setpoint;
+        }
+        if (setpoint < (capabilityOptions.min ?? Infinity)) {
+            newCapabilityOptions.min = setpoint;
+        }
+        if (newCapabilityOptions.max !== undefined || newCapabilityOptions.min !== undefined) {
+            this.log('Update target temperature capability options!', newCapabilityOptions);
+            await this.setCapabilityOptions('target_temperature', newCapabilityOptions).catch(this.error);
+        }
+        this.log('Update target temperature', setpoint);
+        await this.setCapabilityValue('target_temperature', setpoint).catch(this.error);
+    }
     async setMeasuredTemperature(temperature, roundingMode) {
+        this.log('Update measured temperature', temperature);
         await this.setCapabilityValue('measure_temperature', (0, temperatureHelper_1.roundTemperature)(this, temperature, roundingMode));
         this.originalTemperature = temperature;
     }

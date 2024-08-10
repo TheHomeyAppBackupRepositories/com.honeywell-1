@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const homey_1 = __importDefault(require("homey"));
 const homey_oauth2app_1 = require("homey-oauth2app");
+const temperatureHelper_1 = require("../../lib/temperatureHelper");
 class ZoneDriver extends homey_oauth2app_1.OAuth2Driver {
     async onPairListDevices({ oAuth2Client }) {
         const locations = (await oAuth2Client.getLocations().catch(this.error)) ?? [];
@@ -24,13 +25,8 @@ class ZoneDriver extends homey_oauth2app_1.OAuth2Driver {
             'measure_temperature',
         ];
         const location = locations.find((l) => l.locationId === zone.locationId);
-        const setpointCapabilities = zone.setpointCapabilities;
         const capabilitiesOptions = {
-            target_temperature: {
-                min: setpointCapabilities.minHeatSetpoint,
-                max: setpointCapabilities.maxHeatSetpoint,
-                step: setpointCapabilities.valueResolution
-            }
+            target_temperature: (0, temperatureHelper_1.getTargetTemperatureCapabilityOptions)(zone),
         };
         const data = {
             id: zone.id,
